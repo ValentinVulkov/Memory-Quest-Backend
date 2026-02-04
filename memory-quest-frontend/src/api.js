@@ -30,14 +30,6 @@ export async function fetchDecks(token) {
     return res.json();
 }
 
-export async function fetchProfile(token) {
-    const res = await fetch(`${API}/api/profile`, {
-        headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) throw new Error(await res.text());
-    return res.json();
-}
-
 export async function fetchDeck(token, id) {
     const res = await fetch(`${API}/api/decks/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -54,14 +46,27 @@ export async function fetchCards(token, deckId) {
     return res.json();
 }
 
-export async function createDeck(token, title, description) {
+export async function createDeck(token, title, description, is_public) {
     const res = await fetch(`${API}/api/decks`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ title, description }),
+        body: JSON.stringify({ title, description, is_public: !!is_public }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+}
+
+export async function updateDeck(token, deckId, title, description, is_public) {
+    const res = await fetch(`${API}/api/decks/${deckId}`, {
+        method: "PUT",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ title, description, is_public: !!is_public }),
     });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
@@ -78,16 +83,4 @@ export async function createCard(token, deckId, question, answer) {
     });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
-}
-
-export async function deleteCard(token, deckId, cardId) {
-    const res = await fetch(`${API}/api/decks/${deckId}/cards/${cardId}`, {
-        method: "DELETE",
-        headers: {
-            Authorization: `Bearer ${token}`,
-        },
-    });
-    if (!res.ok) throw new Error(await res.text());
-    // backend returns {message: ...}
-    return res.json().catch(() => ({}));
 }

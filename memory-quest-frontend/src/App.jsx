@@ -3,16 +3,31 @@ import React from "react";
 import TopBar from "./components/TopBar";
 import DecksView from "./components/DecksView";
 import AuthModal from "./components/AuthModal";
-import { loginUser, registerUser, fetchDecks, createDeck, fetchProfile } from "./api";
+import { loginUser, registerUser, fetchDecks, createDeck } from "./api";
 import DeckDetailView from "./components/DeckDetailView";
 import { Routes, Route, Navigate } from "react-router-dom";
+
+
+function decodeJwtPayload(token) {
+    try {
+        const parts = String(token || "").split(".");
+        if (parts.length < 2) return null;
+        const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+        const padded = base64 + "===".slice((base64.length + 3) % 4);
+        const json = atob(padded);
+        return JSON.parse(json);
+    } catch {
+        return null;
+    }
+}
 
 export default function App() {
     const [token, setToken] = useState(localStorage.getItem("token") || "");
     const [authOk, setAuthOk] = useState(false);
-    const [userId, setUserId] = useState(null);
     const [decks, setDecks] = useState([]);
     const [msg, setMsg] = useState("");
+
+    const userId = decodeJwtPayload(token)?.user_id ?? null;
 
     const [authOpen, setAuthOpen] = useState(false);
     const [mode, setMode] = useState("login");
@@ -24,6 +39,7 @@ export default function App() {
 
     const [deckTitle, setDeckTitle] = useState("");
     const [deckDescription, setDeckDescription] = useState("");
+    const [deckIsPublic, setDeckIsPublic] = useState(false);
 
     useEffect(() => {
         if (!token) setAuthOpen(true);
@@ -45,17 +61,6 @@ export default function App() {
         if (!token) return;
         setMsg("");
         loadDecks(token);
-    }, [token]);
-
-    useEffect(() => {
-        if (!token) {
-            setUserId(null);
-            return;
-        }
-        // Who am I? Needed for ownership-only UI (e.g. delete card)
-        fetchProfile(token)
-            .then((p) => setUserId(p?.user_id ?? p?.userId ?? null))
-            .catch(() => setUserId(null));
     }, [token]);
 
     async function login(e) {
@@ -92,9 +97,10 @@ export default function App() {
 
         setMsg("");
         try {
-            await createDeck(token, deckTitle, deckDescription);
+            await createDeck(token, deckTitle, deckDescription, deckIsPublic);
             setDeckTitle("");
             setDeckDescription("");
+            setDeckIsPublic(false);
             await loadDecks(token);
             setMsg("✅ Deck created");
         } catch (e) {
@@ -110,7 +116,6 @@ export default function App() {
                 onLogout={() => {
                     localStorage.removeItem("token");
                     setToken("");
-                    setUserId(null);
                     setDecks([]);
                     setAuthOk(false);
                 }}
@@ -128,6 +133,8 @@ export default function App() {
                             setDeckTitle={setDeckTitle}
                             deckDescription={deckDescription}
                             setDeckDescription={setDeckDescription}
+                            deckIsPublic={deckIsPublic}
+                            setDeckIsPublic={setDeckIsPublic}
                             onCreateDeck={addDeck}
                         />
                     }
