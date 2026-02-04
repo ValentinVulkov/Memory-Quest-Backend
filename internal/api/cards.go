@@ -53,19 +53,12 @@ func CreateCard(c *gin.Context) {
 }
 
 func GetCards(c *gin.Context) {
-	userID := c.MustGet("user_id").(uint)
 	deckID := c.Param("id")
 
 	//Verification
 	var deck models.Deck
 	if err := db.DB.First(&deck, deckID).Error; err != nil {
 		c.JSON(404, gin.H{"error": "Deck not found"})
-		return
-	}
-
-	// Privacy: only owner can view cards in private decks
-	if !deck.IsPublic && deck.UserID != userID {
-		c.JSON(403, gin.H{"error": "Unauthorized"})
 		return
 	}
 
@@ -76,19 +69,8 @@ func GetCards(c *gin.Context) {
 }
 
 func GetCard(c *gin.Context) {
-	userID := c.MustGet("user_id").(uint)
 	deckID := c.Param("id")
 	cardID := c.Param("cardId")
-
-	var deck models.Deck
-	if err := db.DB.First(&deck, deckID).Error; err != nil {
-		c.JSON(404, gin.H{"error": "Deck not found"})
-		return
-	}
-	if !deck.IsPublic && deck.UserID != userID {
-		c.JSON(403, gin.H{"error": "Unauthorized"})
-		return
-	}
 
 	var card models.Card
 	if err := db.DB.Where("id = ? AND deck_id = ?", cardID, deckID).First(&card).Error; err != nil {
@@ -169,4 +151,24 @@ func DeleteCard(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{"message": "Card deleted successfully"})
+}
+
+func GetPublicCards(c *gin.Context) {
+	deckID := c.Param("id")
+
+	var deck models.Deck
+	if err := db.DB.First(&deck, deckID).Error; err != nil {
+		c.JSON(404, gin.H{"error": "Deck not found"})
+		return
+	}
+
+	if !deck.IsPublic {
+		c.JSON(403, gin.H{"error": "Deck is private"})
+		return
+	}
+
+	var cards []models.Card
+	db.DB.Where("deck_id = ?", deck.ID).Find(&cards)
+
+	c.JSON(200, cards)
 }

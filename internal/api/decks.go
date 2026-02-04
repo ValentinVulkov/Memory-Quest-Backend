@@ -140,3 +140,20 @@ func GetPublicDecks(c *gin.Context) {
 
 	c.JSON(200, decks)
 }
+
+func GetPublicDeck(c *gin.Context) {
+	id := c.Param("id")
+
+	var deck models.Deck
+	if err := db.DB.First(&deck, id).Error; err != nil {
+		c.JSON(404, gin.H{"error": "Deck not found"})
+		return
+	}
+
+	if !deck.IsPublic {
+		c.JSON(403, gin.H{"error": "Deck is private"})
+		return
+	}
+
+	c.JSON(200, deck)
+}

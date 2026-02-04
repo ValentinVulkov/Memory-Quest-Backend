@@ -86,13 +86,25 @@ export async function updateDeck(token, deckId, payload) {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(payload), // ✅ must be an object
     });
 
-    if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(`updateDeck failed: ${res.status} ${text}`);
-    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(`updateDeck failed: ${res.status} ${JSON.stringify(data)}`);
+    return data;
+}
 
-    return res.json().catch(() => ({}));
+
+export async function fetchPublicDeck(deckId) {
+    const res = await fetch(`${API}/api/decks/public/${deckId}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Failed to load public deck");
+    return data;
+}
+
+export async function fetchPublicCards(deckId) {
+    const res = await fetch(`${API}/api/decks/public/${deckId}/cards`);
+    const data = await res.json().catch(() => ([]));
+    if (!res.ok) throw new Error((data && data.error) || "Failed to load public cards");
+    return data;
 }

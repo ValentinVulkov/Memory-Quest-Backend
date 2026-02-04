@@ -16,6 +16,7 @@ export default function AuthModal({
                                       onLogin,
                                       onRegister,
                                       onClose,
+                                      onGuest,
                                   }) {
     if (!open) return null;
 
@@ -57,6 +58,17 @@ export default function AuthModal({
                     </div>
 
                     <button type="submit">{mode === "login" ? "Login" : "Register"}</button>
+
+                    {!token && (
+                        <button
+                            type="button"
+                            onClick={onGuest}
+                            style={{ width: "100%", marginTop: 10, padding: 12 }}
+                        >
+                            Continue as guest
+                        </button>
+                    )}
+
                 </form>
 
                 <button type="button" onClick={() => setMode(mode === "login" ? "register" : "login")} style={{ marginTop: 10 }}>

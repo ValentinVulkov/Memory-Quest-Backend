@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { fetchDeck, fetchCards, createCard, updateDeck } from "../api";
+import { fetchDeck, fetchCards, createCard, updateDeck, fetchPublicDeck, fetchPublicCards } from "../api";
+
 import CardViewerModal from "./CardViewModal";
 import React from "react";
 
 export default function DeckDetailView({ token, userId }) {
     const { deckId } = useParams();
-
+    //const isGuest = !token;
     const [deck, setDeck] = useState(null);
     const [cards, setCards] = useState([]);
     const [msg, setMsg] = useState("");
@@ -26,7 +27,24 @@ export default function DeckDetailView({ token, userId }) {
     }
 
     useEffect(() => {
-        if (!token) return;
+        async function load() {
+            try {
+                setMsg("");
+                if (token) {
+                    const d = await fetchDeck(token, deckId);
+                    const c = await fetchCards(token, deckId);
+                    setDeck(d);
+                    setCards(Array.isArray(c) ? c : []);
+                } else {
+                    const d = await fetchPublicDeck(deckId);
+                    const c = await fetchPublicCards(deckId);
+                    setDeck(d);
+                    setCards(Array.isArray(c) ? c : []);
+                }
+            } catch (e) {
+                setMsg(e?.message || String(e));
+            }
+        }
         load();
     }, [token, deckId]);
 
@@ -52,7 +70,8 @@ export default function DeckDetailView({ token, userId }) {
             setMsg("Create card failed: " + (e?.message || String(e)));
         }
     }
-
+    const isGuest = !token;
+    const ownerId = deck?.user_id;
     // simple dark styles
     const card = { background: "#1e1e1e", padding: 14, borderRadius: 10, border: "1px solid #2a2a2a" };
     const input = { width: "100%", padding: 12, boxSizing: "border-box", borderRadius: 8, border: "1px solid #333", background: "#111", color: "#fff" };
@@ -61,12 +80,22 @@ export default function DeckDetailView({ token, userId }) {
     const deckTitle = deck ? (deck.title ?? deck.Title ?? `Deck #${deckId}`) : `Deck #${deckId}`;
 
     const deckUserId = deck?.user_id ?? deck?.UserID ?? null;
-    const isOwner = userId != null && deckUserId != null && Number(deckUserId) === Number(userId);
+
+
+    const isOwner =
+        !!token &&
+        deck?.user_id != null &&
+        userId != null &&
+        Number(deck.user_id) === Number(userId);
     const isPublic = !!(deck?.is_public ?? deck?.IsPublic ?? false);
 
 
     return (
+
         <div style={{ display: "grid", gap: 12 }}>
+            <div style={{fontSize: 12, opacity: 0.7}}>
+                guest={String(isGuest)} ownerId={String(ownerId)} userId={String(userId)} isOwner={String(isOwner)}
+            </div>
             <div style={card}>
                 <Link to="/decks" style={{ color: "#fff" }}>← Back to decks</Link>
                 <div style={{ marginTop: 10, fontWeight: 800 }}>{deckTitle}</div>
@@ -83,16 +112,30 @@ export default function DeckDetailView({ token, userId }) {
                                 checked={isPublic}
                                 onChange={async (e) => {
                                     const next = e.target.checked;
+
                                     try {
                                         const title = deck?.title ?? deck?.Title ?? "";
                                         const description = deck?.description ?? deck?.Description ?? "";
-                                        const updated = await updateDeck(token, deckId, title, description, next);
-                                        setDeck(updated);
+
+                                        await updateDeck(token, deck.id ?? deck.ID, {
+                                            title,
+                                            description,
+                                            is_public: next,
+                                        });
+
+                                        // update UI locally
+                                        setDeck({
+                                            ...deck,
+                                            is_public: next,
+                                            IsPublic: next,
+                                        });
+
                                         setMsg(next ? "✅ Deck is now public" : "✅ Deck is now private");
                                     } catch (err) {
                                         setMsg("Update visibility failed: " + (err?.message || String(err)));
                                     }
                                 }}
+
                             />
                             Make public
                         </label>
@@ -122,7 +165,7 @@ export default function DeckDetailView({ token, userId }) {
 
                 </div>
             </div>
-
+            {!isGuest && (
             <div style={card}>
                 <div style={{ fontWeight: 800, marginBottom: 10 }}>Create card</div>
                 <form onSubmit={onCreate} style={{ display: "grid", gap: 10 }}>
@@ -141,7 +184,7 @@ export default function DeckDetailView({ token, userId }) {
                     <button type="submit" style={btn}>Create</button>
                 </form>
             </div>
-
+                )}
             <div style={card}>
                 <div style={{ fontWeight: 800, marginBottom: 10 }}>Cards</div>
 

@@ -47,7 +47,9 @@ func main() {
 	r.POST("/api/login", api.Login)
 
 	// Public decks (no auth required)
-	r.GET("/api/decks/public", api.GetPublicDecks)
+	r.GET("/api/decks/public", api.GetAllDecks)
+	r.GET("/api/decks/public/:id", api.GetPublicDeck)
+	r.GET("/api/decks/public/:id/cards", api.GetPublicCards)
 
 	auth := r.Group("/api")
 	auth.Use(middleware.AuthRequired())

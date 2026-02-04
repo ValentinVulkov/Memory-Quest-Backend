@@ -24,10 +24,37 @@ export default function App() {
 
     const [deckTitle, setDeckTitle] = useState("");
     const [deckDescription, setDeckDescription] = useState("");
+    const [guest, setGuest] = useState(false);
+    const [userId, setUserId] = useState(undefined);
+
 
     useEffect(() => {
-        if (!token) setAuthOpen(true);
+        async function loadProfile() {
+            if (!token) {
+                setUserId(undefined);
+                return;
+            }
+
+            try {
+                const res = await fetch("http://localhost:8080/api/profile", {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                const data = await res.json();
+                setUserId(data.user_id);
+            } catch {
+                setUserId(undefined);
+            }
+        }
+
+        loadProfile();
     }, [token]);
+
+
+    function continueAsGuest() {
+        setGuest(true);
+        setAuthOpen(false);
+        setMsg("");
+    }
 
     async function loadDecks(t) {
         try {
@@ -73,6 +100,7 @@ export default function App() {
             setToken(t);
             setAuthOpen(false);
             setAuthOk(false);
+            setGuest(false);
         } catch (e) {
             setMsg("Login failed: " + (e?.message || String(e)));
         }
@@ -114,8 +142,7 @@ export default function App() {
                 onLogout={() => {
                     localStorage.removeItem("token");
                     setToken("");
-                    setDecks([]);
-                    setAuthOk(false);
+                    setGuest(true); // optional: go back to guest browsing
                 }}
             />
             <Routes>
@@ -136,7 +163,7 @@ export default function App() {
                         />
                     }
                 />
-                <Route path="/decks/:deckId" element={<DeckDetailView token={token} />} />
+                <Route path="/decks/:deckId" element={<DeckDetailView token={token} userId={userId} />} />
             </Routes>
 
             <AuthModal
@@ -155,6 +182,7 @@ export default function App() {
                 onLogin={login}
                 onRegister={register}
                 onClose={() => setAuthOpen(false)}
+                onGuest={continueAsGuest}
             />
 
             {msg && (
