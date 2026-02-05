@@ -44,16 +44,22 @@ func SubmitQuizAnswer(c *gin.Context) {
 
 	now := time.Now()
 
-	if result.LastActivityAt != nil {
-		if now.Sub(*result.LastActivityAt) > time.Hour {
-			result.CompletedAt = &now
-			db.DB.Save(&result)
+	baseline := result.LastActivityAt
+	if baseline == nil {
+		// fall back to created_at (attempt start)
+		t := result.CreatedAt
+		baseline = &t
+	}
 
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "Quiz attempt expired (inactive for over 1 hour)",
-			})
-			return
-		}
+	// Auto-finish if inactive for 1 hour
+	if now.Sub(*baseline) > time.Hour {
+		result.CompletedAt = &now
+		db.DB.Save(&result)
+
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Quiz attempt expired (inactive for over 1 hour)",
+		})
+		return
 	}
 
 	result.LastActivityAt = &now

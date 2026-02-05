@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"time"
 
 	"memory-quest-backend/internal/api"
 	"memory-quest-backend/internal/db"
@@ -77,6 +78,34 @@ func main() {
 		auth.POST("/decks/:id/quiz/start", api.StartQuiz)
 		auth.POST("/quizzes/:resultId/answer", api.SubmitQuizAnswer)
 	}
+	//Continuesly check time.
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			now := time.Now()
+			expiry := now.Add(-1 * time.Hour)
+
+			// Expire attempts with last_activity_at older than 1 hour
+			db.DB.Exec(`
+			UPDATE quiz_results
+			SET completed_at = ?
+			WHERE completed_at IS NULL
+			  AND last_activity_at IS NOT NULL
+			  AND last_activity_at < ?
+		`, now, expiry)
+
+			// Expire attempts that never had activity, based on created_at
+			db.DB.Exec(`
+			UPDATE quiz_results
+			SET completed_at = ?
+			WHERE completed_at IS NULL
+			  AND last_activity_at IS NULL
+			  AND created_at < ?
+		`, now, expiry)
+		}
+	}()
 
 	port := os.Getenv("PORT")
 	if port == "" {

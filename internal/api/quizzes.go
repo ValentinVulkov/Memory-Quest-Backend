@@ -74,14 +74,18 @@ func StartQuiz(c *gin.Context) {
 	}
 
 	// Create result entry immediately
+	now := time.Now()
+
 	result := models.QuizResult{
 		QuizID:         quiz.ID,
 		UserID:         userID,
 		Score:          0,
 		TotalQuestions: len(cards),
+		AnsweredCount:  0,
+		LastActivityAt: &now,
 	}
 	if err := db.DB.Create(&result).Error; err != nil {
-		c.JSON(500, gin.H{"error": "Failed to create quiz result", "details": err.Error()})
+		c.JSON(500, gin.H{"error": "Failed to create quiz result"})
 		return
 	}
 
