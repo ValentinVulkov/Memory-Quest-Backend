@@ -1,147 +1,137 @@
 package api
 
 import (
+	"math/rand"
+	"net/http"
+	"time"
+
 	"memory-quest-backend/internal/db"
 	"memory-quest-backend/internal/models"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
-func CreateQuiz(c *gin.Context) {
+type QuizQuestionDTO struct {
+	ID       uint     `json:"id"`
+	CardID   uint     `json:"card_id"`
+	Question string   `json:"question"`
+	Options  []string `json:"options"`
+}
+
+type StartQuizResponse struct {
+	QuizID         uint              `json:"quiz_id"`
+	QuizResultID   uint              `json:"quiz_result_id"`
+	DeckID         uint              `json:"deck_id"`
+	Title          string            `json:"title"`
+	TotalQuestions int               `json:"total_questions"`
+	Questions      []QuizQuestionDTO `json:"questions"`
+}
+
+func StartQuiz(c *gin.Context) {
+	deckID := c.Param("id")
 	userID := c.MustGet("user_id").(uint)
 
-	var body struct {
-		DeckID uint   `json:"deck_id" binding:"required"`
-		Title  string `json:"title"`
-	}
-
-	if err := c.BindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
-		return
-	}
-
+	// Load deck
 	var deck models.Deck
-	if err := db.DB.Preload("Cards").First(&deck, body.DeckID).Error; err != nil {
+	if err := db.DB.First(&deck, deckID).Error; err != nil {
 		c.JSON(404, gin.H{"error": "Deck not found"})
 		return
 	}
 
-	if len(deck.Cards) == 0 {
-		c.JSON(400, gin.H{"error": "Deck has no cards"})
+	// Permission check
+	if !deck.IsPublic && deck.UserID != userID {
+		c.JSON(403, gin.H{"error": "Not your deck"})
 		return
 	}
 
-	title := body.Title
-	if title == "" {
-		title = "Quiz: " + deck.Title
+	// Load cards
+	var cards []models.Card
+	if err := db.DB.Where("deck_id = ?", deck.ID).Find(&cards).Error; err != nil {
+		c.JSON(500, gin.H{"error": "Failed to load cards"})
+		return
 	}
 
+	if len(cards) < 4 {
+		c.JSON(400, gin.H{"error": "Need at least 4 cards to start quiz"})
+		return
+	}
+
+	// Build answer pool
+	allAnswers := make([]string, 0, len(cards))
+	for _, card := range cards {
+		allAnswers = append(allAnswers, card.Answer)
+	}
+
+	// Create quiz
 	quiz := models.Quiz{
-		UserID: userID,
-		DeckID: deck.ID,
-		Title:  title,
+		DeckID:    deck.ID,
+		Title:     "Quiz: " + deck.Title,
+		CreatedAt: time.Now(),
 	}
-
 	if err := db.DB.Create(&quiz).Error; err != nil {
 		c.JSON(500, gin.H{"error": "Failed to create quiz"})
 		return
 	}
 
-	var questions []models.QuizQuestion
-	for _, card := range deck.Cards {
-		question := models.QuizQuestion{
+	// Create result entry immediately
+	result := models.QuizResult{
+		QuizID:         quiz.ID,
+		UserID:         userID,
+		Score:          0,
+		TotalQuestions: len(cards),
+	}
+	if err := db.DB.Create(&result).Error; err != nil {
+		c.JSON(500, gin.H{"error": "Failed to create quiz result", "details": err.Error()})
+		return
+	}
+
+	db.DB.Create(&result)
+
+	questions := make([]QuizQuestionDTO, 0, len(cards))
+
+	rand.Seed(time.Now().UnixNano())
+
+	for _, card := range cards {
+		opts := buildOptions(allAnswers, card.Answer)
+
+		q := models.QuizQuestion{
 			QuizID:        quiz.ID,
 			CardID:        card.ID,
 			QuestionText:  card.Question,
 			CorrectAnswer: card.Answer,
 		}
-		questions = append(questions, question)
-	}
+		db.DB.Create(&q)
 
-	if err := db.DB.Create(&questions).Error; err != nil {
-		c.JSON(500, gin.H{"error": "Failed to create quiz question"})
-		return
-	}
-
-	quiz.Questions = questions
-
-	c.JSON(201, quiz)
-
-}
-
-func GetQuizzes(c *gin.Context) {
-	userID := c.MustGet("user_id").(uint)
-
-	var quizzes []models.Quiz
-	db.DB.Where("user_id = ?", userID).Order("created_at DESC").Find(&quizzes)
-
-	c.JSON(200, quizzes)
-}
-
-func GetQuiz(c *gin.Context) {
-	quizID := c.Param("id")
-
-	var quiz models.Quiz
-	if err := db.DB.Preload("Questions").First(&quiz, quizID).Error; err != nil {
-		c.JSON(404, gin.H{"error": "Quiz not found"})
-		return
-	}
-
-	c.JSON(200, quiz)
-}
-
-func DeleteQuiz(c *gin.Context) {
-	userID := c.MustGet("user_id").(uint)
-	quizID := c.Param("id")
-
-	var quiz models.Quiz
-	if err := db.DB.First(&quiz, quizID).Error; err != nil {
-		c.JSON(404, gin.H{"error": "Quiz not found"})
-		return
-	}
-
-	if quiz.UserID != userID {
-		c.JSON(403, gin.H{"error": "Unauthorized"})
-		return
-	}
-
-	db.DB.Where("quiz_id = ?", quizID).Delete(&models.QuizQuestion{})
-
-	if err := db.DB.Delete(&quiz).Error; err != nil {
-		c.JSON(500, gin.H{"error": "Failed to delete quiz"})
-		return
-	}
-
-	c.JSON(200, gin.H{"message": "Quiz deleted successfully"})
-
-}
-
-func PlayQuiz(c *gin.Context) {
-	quizID := c.Param("id")
-
-	var quiz models.Quiz
-	if err := db.DB.Preload("Questions").First(&quiz, quizID).Error; err != nil {
-		c.JSON(404, gin.H{"error": "Quiz not found"})
-		return
-	}
-
-	type QuestionResponse struct {
-		ID           uint   `json:"id"`
-		QuestionText string `json:"question"`
-	}
-
-	var questions []QuestionResponse
-	for _, q := range quiz.Questions {
-		questions = append(questions, QuestionResponse{
-			ID:           q.ID,
-			QuestionText: q.QuestionText,
+		questions = append(questions, QuizQuestionDTO{
+			ID:       q.ID,
+			CardID:   card.ID,
+			Question: card.Question,
+			Options:  opts,
 		})
 	}
 
-	c.JSON(200, gin.H{
-		"quiz_id":   quiz.ID,
-		"title":     quiz.Title,
-		"questions": questions,
+	c.JSON(http.StatusCreated, StartQuizResponse{
+		QuizID:         quiz.ID,
+		QuizResultID:   result.ID,
+		DeckID:         deck.ID,
+		Title:          quiz.Title,
+		TotalQuestions: len(questions),
+		Questions:      questions,
 	})
+}
+
+func buildOptions(pool []string, correct string) []string {
+	opts := []string{correct}
+	used := map[string]bool{correct: true}
+
+	for len(opts) < 4 {
+		candidate := pool[rand.Intn(len(pool))]
+		if !used[candidate] {
+			opts = append(opts, candidate)
+			used[candidate] = true
+		}
+	}
+
+	rand.Shuffle(len(opts), func(i, j int) { opts[i], opts[j] = opts[j], opts[i] })
+	return opts
 }

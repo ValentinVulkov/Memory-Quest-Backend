@@ -72,6 +72,10 @@ func main() {
 		auth.GET("/decks/:id/cards/:cardId", api.GetCard)
 		auth.PUT("/decks/:id/cards/:cardId", api.UpdateCard)
 		auth.DELETE("/decks/:id/cards/:cardId", api.DeleteCard)
+
+		//Quiz
+		auth.POST("/decks/:id/quiz/start", api.StartQuiz)
+		auth.POST("/quizzes/:resultId/answer", api.SubmitQuizAnswer)
 	}
 
 	port := os.Getenv("PORT")
